@@ -9,6 +9,11 @@ namespace Craft.Application.Logics.Countries.Quries;
 
 public class GetCountryByIdQuery : IRequest<string>
 {
+    public GetCountryByIdQuery(long id)
+    {
+        Id = id;
+    }
+
     public long Id { get; set; }
 }
 public class GetCountryByIdQueryHandler : IRequestHandler<GetCountryByIdQuery, string>

@@ -1,8 +1,10 @@
+using Craft.Application;
+using Craft.Application.Common.Interface;
 using Craft.Application.Common.Interfaces;
+using Craft.Infrastucture.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,17 +29,35 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Hour)
     .CreateLogger();
+        
+builder.Host.UseSerilog();
 
+builder.Services.AddApplicationLayer();
 
 builder.Services.AddHttpContextAccessor();
+
+
+//try
+//{
+//    builder.Services.AddDbContext<ApplicationContext>(options =>
+//        options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationContext"), opt => opt.EnableRetryOnFailure()));
+//}
+//catch (SqlException)
+//{
+//    Log.Warning("Failed to connect to SQL Server. Falling back to in-memory database.");
+//    builder.Services.AddDbContext<ApplicationContext>(options =>
+//        options.UseInMemoryDatabase("CraftDb"));
+//}
+
 builder.Services.AddDbContext<ApplicationContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationContext"), opt => opt.EnableRetryOnFailure()));
+        options.UseInMemoryDatabase("CraftDb"));
 
+builder.Services.AddScoped<IApplicationContext, ApplicationContext>();
 
-builder.Services.AddScoped<ApplicationContext>();
+builder.Services.AddScoped<IEmailService, EmailService>(); // Register EmailService
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -53,7 +73,7 @@ if (!builder.Environment.IsDevelopment())
     });
 }
 
-// Configure CORS to allow access only from specific domains
+// Configure CORS.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowSpecificOrigins",

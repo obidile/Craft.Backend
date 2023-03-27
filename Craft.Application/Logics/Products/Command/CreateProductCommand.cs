@@ -4,6 +4,7 @@ using Craft.Application.Common.Interface;
 using Craft.Domain.Entities;
 using Craft.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -16,7 +17,7 @@ public class CreateProductCommand : IRequest<string>
     public string Description { get; set; }
     public decimal Price { get; set; }
     public int Quantity { get; set; }
-    public IFormFile ImageUrlUpload { get; set; }
+    public IFormFile ProductImageUrl { get; set; }
     public long BusinessId { get; set; }
     public long CategoryId { get; set; }
 }
@@ -25,12 +26,15 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
     private readonly IApplicationContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    public CreateProductCommandHandler(IApplicationContext dbContext, IMapper mapper, IHttpContextAccessor httpContextAccessor)
+    private readonly IWebHostEnvironment _hostEnvironment;
+    public CreateProductCommandHandler(IApplicationContext dbContext, IMapper mapper, IHttpContextAccessor httpContextAccessor, IWebHostEnvironment hostEnvironment)
     {
         _dbContext = dbContext;
         _mapper = mapper;
         _httpContextAccessor = httpContextAccessor;
+        _hostEnvironment = hostEnvironment;
     }
+
 
     public async Task<string> Handle(CreateProductCommand request, CancellationToken cancellationToken)
     {
@@ -84,22 +88,21 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
         _dbContext.Products.Add(model);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        if (request.ImageUrlUpload != null && request.ImageUrlUpload.Length > 0)
+        if (request.ProductImageUrl != null || request.ProductImageUrl?.Length > 0)
         {
-            string folder = $"image/ProductImages/{model.Id}";
-            var fileName = Guid.NewGuid().ToString();
-            var filePath = Path.Combine($"wwwroot/{folder}", fileName);
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "ProductImages", model.Id.ToString());
 
-            try
+            if (!Directory.Exists(folderPath))
             {
-                await UploadHelper.UploadFile(request.ImageUrlUpload, filePath);
-            }
-            catch (Exception)
-            {
-                return $"An error occurred while uploading the product image, Please try again.";
+                Directory.CreateDirectory(folderPath);
             }
 
-            model.ImageUrl = $"/{folder}/{fileName}";
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ProductImageUrl.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
+
+            await UploadHelper.UploadFile(request.ProductImageUrl, fileName, folderPath);
+            model.ImageUrl = Path.Combine("images", "ProductImages", model.Id.ToString(), fileName);
 
             _dbContext.Products.Update(model);
             await _dbContext.SaveChangesAsync(cancellationToken);

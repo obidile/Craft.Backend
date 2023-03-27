@@ -39,8 +39,6 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
             return "User was not found";
         }
 
-        
-
         if (user != null)
         {
             string hashedPassword = user.PasswordHush;

@@ -3,8 +3,10 @@ using Craft.Application.Common.Enums;
 using Craft.Application.Common.Helpers;
 using Craft.Application.Common.Interface;
 using MediatR;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using System.ComponentModel.DataAnnotations;
 
 namespace Craft.Application.Logics.Users.Command;
@@ -25,26 +27,24 @@ public class UpdateUserCommand : IRequest<string>
 public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, string>
 {
     private readonly IApplicationContext _dbContext;
-    private readonly IMapper _mapper;
+    private readonly IWebHostEnvironment _hostEnvironment;
 
-    public UpdateUserCommandHandler(IApplicationContext dbContext, IMapper mapper)
+    public UpdateUserCommandHandler(IApplicationContext dbContext, IWebHostEnvironment hostEnvironment)
     {
         _dbContext = dbContext;
-        _mapper = mapper;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<string> Handle(UpdateUserCommand request, CancellationToken cancellationToken)
     {
-        using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);
+        
 
-        try
-        {
             if (!new EmailAddressAttribute().IsValid(request.MailAddress))
             {
                 return "Invalid email format";
             }
 
-            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == request.Id);
+            var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
 
             if (user == null)
             {
@@ -61,25 +61,27 @@ public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, strin
 
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            if (request.UserImageUpload != null || request.UserImageUpload?.Length > 0)
-            {
-                string folder = $"image/UsersImages/{user.Id}";
-                var fileName = Guid.NewGuid().ToString();
-                var filePath = Path.Combine($"wwwroot/{folder}", fileName);
-                await UploadHelper.UploadFile(request.UserImageUpload, filePath);
+        if (request.UserImageUpload != null || request.UserImageUpload?.Length > 0)
+        {
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "UsersImages", user.Id.ToString());
 
-                _dbContext.Users.Update(user);
-                await _dbContext.SaveChangesAsync(cancellationToken);
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
             }
 
-            await transaction.CommitAsync(cancellationToken);
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.UserImageUpload.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
 
-            return "User was successfully updated";
+            await UploadHelper.UploadFile(request.UserImageUpload, fileName, folderPath);
+            user.ImageUrl = Path.Combine("images", "UsersImages", user.Id.ToString(), fileName);
+
+            _dbContext.Users.Update(user);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw new NotImplementedException("Error try again");
-        }
+
+
+        return "User was successfully updated";
     }
 }

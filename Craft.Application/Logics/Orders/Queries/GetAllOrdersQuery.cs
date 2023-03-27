@@ -22,7 +22,7 @@ public class GetAllOrdersQueryHandler : IRequestHandler<GetAllOrdersQuery, strin
 
     public async Task<string> Handle(GetAllOrdersQuery request, CancellationToken cancellationToken)
     {
-        var query = _dbContext.Orders.AsNoTracking().OrderBy(x => x.CreatedDate).ProjectTo<OrderModel>(_mapper.ConfigurationProvider).ToListAsync();
+        var query =await _dbContext.Orders.AsNoTracking().OrderBy(x => x.CreatedDate).ProjectTo<OrderModel>(_mapper.ConfigurationProvider).ToListAsync();
 
         return query.ToString();
     }

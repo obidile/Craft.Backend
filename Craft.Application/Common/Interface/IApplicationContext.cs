@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Craft.Application.Common.Interface;
 
-public interface IApplicationContext : IAsyncDisposable
+public interface IApplicationContext
 {
     DbSet<User> Users { get; set; }
     DbSet<Business> Businesses { get; set; }
@@ -21,5 +21,5 @@ public interface IApplicationContext : IAsyncDisposable
 
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-    Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken);
+   
 }

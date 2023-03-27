@@ -9,7 +9,14 @@ public class UploadHelper
         if (upLoad == null || upLoad.Length == 0)
         {
             return null;
+
         }
+
+        if (string.IsNullOrEmpty(filePath))
+        {
+            filePath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        }
+
         if (!Directory.Exists(filePath))
         {
             Directory.CreateDirectory(filePath);

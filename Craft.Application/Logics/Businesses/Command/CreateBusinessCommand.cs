@@ -2,13 +2,12 @@
 using Craft.Application.Common.Interface;
 using Craft.Domain.Entities;
 using FluentValidation;
-using Serilog;
 using MediatR;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Craft.Domain.Enums;
 
 namespace Craft.Application.Logics.Businesses.Command;
 
@@ -16,7 +15,7 @@ public class CreateBusinessCommand : IRequest<string>
 {
     public string BusinessName { get; set; }
     public string BusinessAddress { get; set; }
-    public IFormFile UploadLogo { get; set; }
+    public IFormFile LogoUrl { get; set; }
     public string BusinessMail { get; set; }
     public string PhoneNumber { get; set; }
     public string DisplayedPhoneNumber { get; set; }
@@ -51,23 +50,21 @@ public class CreateBusinessCommandValidator : AbstractValidator<CreateBusinessCo
         RuleFor(x => x.InstgramURL).MaximumLength(100);
         RuleFor(x => x.TwitterURL).MaximumLength(100);
         RuleFor(x => x.LinkedinUrl).MaximumLength(100);
-        RuleFor(x => x.UploadLogo).NotNull().Must(x => x.Length > 0 && x.Length <= 5 * 1024 * 1024).WithMessage("The logo must be between 0 and 5 MB in size.");
+        RuleFor(x => x.LogoUrl).NotNull().Must(x => x.Length > 0 && x.Length <= 5 * 1024 * 1024).WithMessage("The logo must be between 0 and 5 MB in size.");
     }
 }
 public class CreateBusinessCommandHandler : IRequestHandler<CreateBusinessCommand, string>
 {
     private readonly IApplicationContext _dbContext;
-    private readonly ILogger<CreateBusinessCommand> _logger;
-    public CreateBusinessCommandHandler(IApplicationContext dbContext, ILogger<CreateBusinessCommand> logger)
+    private readonly IWebHostEnvironment _hostEnvironment;
+    public CreateBusinessCommandHandler(IApplicationContext dbContext, IWebHostEnvironment hostEnvironment)
     {
         _dbContext = dbContext;
-        _logger = logger;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<string> Handle(CreateBusinessCommand request, CancellationToken cancellationToken)
     {
-        try
-        {
             var exist = await _dbContext.Businesses.AsNoTracking().AnyAsync(x => x.BusinessName.ToLower() == request.BusinessName.ToLower());
             if (exist)
             {
@@ -96,32 +93,33 @@ public class CreateBusinessCommandHandler : IRequestHandler<CreateBusinessComman
             _dbContext.Businesses.Add(model);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            if (request.UploadLogo != null || request.UploadLogo?.Length > 0)
+
+        if (request.LogoUrl != null || request.LogoUrl?.Length > 0)
+        {
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "BusinessLogos", model.Id.ToString());
+
+            if (!Directory.Exists(folderPath))
             {
-                string folder = $"image/BusinessLogos/{model.Id}";
-                var fileName = Guid.NewGuid().ToString();
-                var filePath = Path.Combine($"wwwroot/{folder}", fileName);
-                await UploadHelper.UploadFile(request.UploadLogo, filePath);
+                Directory.CreateDirectory(folderPath);
             }
 
-            model = await _dbContext.Businesses.AsNoTracking().Include(x => x.Country).Include(x => x.State).FirstOrDefaultAsync(x => x.Id == model.Id);
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.LogoUrl.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
+
+            await UploadHelper.UploadFile(request.LogoUrl, fileName, folderPath);
+            model.Logo = Path.Combine("images", "BusinessLogos", model.Id.ToString(), fileName);
+
+            _dbContext.Businesses.Update(model);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        model = await _dbContext.Businesses.AsNoTracking().Include(x => x.Country).Include(x => x.State).FirstOrDefaultAsync(x => x.Id == model.Id);
 
             _dbContext.Businesses.Update(model);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return "Business was successfully created";
-        }
-        catch (ValidationException ex)
-        {
-            return $"Validation failed: {ex.Message}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "An error occurred while creating the business");
-
-            // Handle other errors
-            return "An error occurred while creating the business";
-        }
+            return "Business profile was successfully created";
 
 
     }

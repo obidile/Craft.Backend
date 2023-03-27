@@ -4,8 +4,10 @@ using Craft.Application.Common.Interface;
 using Craft.Domain.Entities;
 using Craft.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 namespace Craft.Application.Logics.Businesses.Command;
 
@@ -14,7 +16,7 @@ public class UpdateBusinessCommand : IRequest<string>
     public long Id { get; set; }
     public string BusinessName { get; set; }
     public string BusinessAddress { get; set; }
-    public IFormFile UploadLogo { get; set; }
+    public IFormFile LogoUrl { get; set; }
     public string BusinessMail { get; set; }
     public string PhoneNumber { get; set; }
     public string DisplayedPhoneNumber { get; set; }
@@ -35,12 +37,14 @@ public class UpdateBusinessCommandHandler : IRequestHandler<UpdateBusinessComman
 {
     private readonly IApplicationContext _dbContext;
     private readonly IMapper _mapper;
-
-    public UpdateBusinessCommandHandler(IApplicationContext dbContext, IMapper mapper)
+    private readonly IWebHostEnvironment _hostEnvironment;
+    public UpdateBusinessCommandHandler(IApplicationContext dbContext, IMapper mapper, IWebHostEnvironment hostEnvironment)
     {
         _dbContext = dbContext;
         _mapper = mapper;
+        _hostEnvironment = hostEnvironment;
     }
+
     public async Task<string> Handle(UpdateBusinessCommand request, CancellationToken cancellationToken)
     {
         var business = await _dbContext.Businesses.FirstOrDefaultAsync(x => x.Id == request.Id);
@@ -70,15 +74,24 @@ public class UpdateBusinessCommandHandler : IRequestHandler<UpdateBusinessComman
         await _dbContext.SaveChangesAsync(cancellationToken);
 
 
-        if (request.UploadLogo != null || request.UploadLogo?.Length > 0)
+        if (request.LogoUrl != null || request.LogoUrl?.Length > 0)
         {
-            string folder = $"image/BusinessLogos/{business.Id}";
-            var fileName = Guid.NewGuid().ToString();
-            var filePath = Path.Combine($"wwwroot/{folder}", fileName);
-            await UploadHelper.UploadFile(request.UploadLogo, filePath);
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "BusinessLogos", business.Id.ToString());
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.LogoUrl.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
+
+            await UploadHelper.UploadFile(request.LogoUrl, fileName, folderPath);
+            business.Logo = Path.Combine("images", "BusinessLogos", business.Id.ToString(), fileName);
 
             _dbContext.Businesses.Update(business);
-            await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return "Business Profile was successfully updated";

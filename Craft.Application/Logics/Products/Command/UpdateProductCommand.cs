@@ -3,6 +3,7 @@ using Craft.Application.Common.Helpers;
 using Craft.Application.Common.Interface;
 using Craft.Domain.Enums;
 using MediatR;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -16,7 +17,7 @@ public class UpdateProductCommand : IRequest<string>
     public string Description { get; set; }
     public decimal Price { get; set; }
     public int Quantity { get; set; }
-    public IFormFile ImageUrlUpload { get; set; }
+    public IFormFile ProductImageUrl { get; set; }
     public long BusinessId { get; set; }
     public long CategoryId { get; set; }
 }
@@ -26,12 +27,14 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
     private readonly IApplicationContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IWebHostEnvironment _hostEnvironment;
 
-    public UpdateProductCommandHandler(IApplicationContext dbContext, IMapper mapper, IHttpContextAccessor httpContextAccessor)
+    public UpdateProductCommandHandler(IApplicationContext dbContext, IMapper mapper, IHttpContextAccessor httpContextAccessor, IWebHostEnvironment hostEnvironment)
     {
         _dbContext = dbContext;
         _mapper = mapper;
         _httpContextAccessor = httpContextAccessor;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<string> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -82,22 +85,24 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         product.UpdatedBy = $"{user.FirstName} - {user.LastName} {user.MailAddress}";
         product.UpdateDate = DateTime.UtcNow;
 
-        if (request.ImageUrlUpload != null && request.ImageUrlUpload.Length > 0)
+        if (request.ProductImageUrl != null || request.ProductImageUrl?.Length > 0)
         {
-            string folder = $"image/ProductImages/{product.Id}";
-            var fileName = Guid.NewGuid().ToString();
-            var filePath = Path.Combine($"wwwroot/{folder}", fileName);
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "ProductImages", product.Id.ToString());
 
-            try
+            if (!Directory.Exists(folderPath))
             {
-                await UploadHelper.UploadFile(request.ImageUrlUpload, filePath);
-            }
-            catch (Exception)
-            {
-                return $"An error occurred while uploading the product image, Please try again.";
+                Directory.CreateDirectory(folderPath);
             }
 
-            product.ImageUrl = $"/{folder}/{fileName}";
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ProductImageUrl.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
+
+            await UploadHelper.UploadFile(request.ProductImageUrl, fileName, folderPath);
+            product.ImageUrl = Path.Combine("images", "ProductImages", product.Id.ToString(), fileName);
+
+            _dbContext.Products.Update(product);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         _dbContext.Products.Update(product);

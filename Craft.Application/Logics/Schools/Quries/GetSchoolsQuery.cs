@@ -21,7 +21,7 @@ public class GetSchoolsQueryHandler : IRequestHandler<GetSchoolsQuery, string>
     }
     public async Task<string> Handle(GetSchoolsQuery request, CancellationToken cancellationToken)
     {
-        var query = _dbContext.Schools.AsNoTracking().OrderBy(x => x.Name).ProjectTo<SchoolModel>(_mapper.ConfigurationProvider).ToListAsync();
+        var query = await _dbContext.Schools.AsNoTracking().OrderBy(x => x.Name).ProjectTo<SchoolModel>(_mapper.ConfigurationProvider).ToListAsync();
 
         return query.ToString();
     }

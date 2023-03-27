@@ -1,4 +1,7 @@
-﻿namespace Craft.Domain.Common;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
+
+namespace Craft.Domain.Common;
 
 public class BaseObject
 {

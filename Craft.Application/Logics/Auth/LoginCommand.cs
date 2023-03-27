@@ -4,12 +4,10 @@ using Microsoft.Extensions.Configuration;
 using CryptoHelper;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using MXTires.Microdata.Core;
-using System.Net.Http;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace Craft.Application.Logics.Auth
 {
@@ -41,7 +39,7 @@ namespace Craft.Application.Logics.Auth
 
             if (user.Deactivated)
             {
-                return "Your account has been suspended";
+                return "Your account has been suspended. Send a reactivation mail to craftreactivation@gmail.com";
             }
 
             var jwtToken = GenerateToken(user);
@@ -54,12 +52,10 @@ namespace Craft.Application.Logics.Auth
             return jwtToken;
         }
 
-        public string GenerateToken(User user)
+        private string GenerateToken(User user) // This Implmentation allows Token expires in 30 days
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_config.GetValue<string>("Jwt:SecretKey"));
-
-            var expiryTime = _config.GetValue<int>("Jwt:ExpiryTime");
+            var key = Encoding.ASCII.GetBytes(_config.GetValue<string>("JwtConfig:Secret") ?? "default-secret-key");
 
             var claims = new List<Claim>()
             {
@@ -75,14 +71,17 @@ namespace Craft.Application.Logics.Auth
                 claims.Add(new Claim("phoneNumber", user.PhoneNumber));
             }
 
+            var nowUtc = DateTime.UtcNow;
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddMinutes(expiryTime),
+                IssuedAt = nowUtc,
+                Expires = nowUtc.AddDays(30),
                 Issuer = _config.GetValue<string>("JwtConfig:Issuer"),
                 Audience = _config.GetValue<string>("JwtConfig:Audience"),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
+
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }

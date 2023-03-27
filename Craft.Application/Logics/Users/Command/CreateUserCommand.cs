@@ -1,5 +1,4 @@
-﻿using AutoMapper;
-using Craft.Application.Common.Helpers;
+﻿using Craft.Application.Common.Helpers;
 using Craft.Application.Common.Interface;
 using Craft.Domain.Entities;
 using Craft.Domain.Enums;
@@ -7,7 +6,9 @@ using CryptoHelper;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 
 namespace Craft.Application.Logics.Users.Command;
 
@@ -26,82 +27,90 @@ public class CreateUserCommand : IRequest<string>
 }
 public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, string>
 {
-    private readonly IApplicationContext _dbContext;
-    private readonly IMapper _mapper;
-    private readonly IEmailService _emailService;
 
-    public CreateUserCommandHandler(IApplicationContext dbContext, IMapper mapper, IEmailService emailService)
+    private readonly IApplicationContext _dbContext;
+    private readonly IEmailService _emailService;
+    private readonly IWebHostEnvironment _hostEnvironment;
+    private readonly IConfiguration config;
+    public CreateUserCommandHandler(IApplicationContext dbContext, IEmailService emailService, IWebHostEnvironment hostEnvironment, IConfiguration config)
     {
         _dbContext = dbContext;
-        _mapper = mapper;
         _emailService = emailService;
+        _hostEnvironment = hostEnvironment;
+        this.config = config;
     }
 
     public async Task<string> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
-        try
+        if (request.AccountType == AccountTypeEnum.Admin)
         {
-            using var transaction = await _dbContext.BeginTransactionAsync(cancellationToken);
-
-            if (!new EmailAddressAttribute().IsValid(request.MailAddress))
+            int adminCount = await _dbContext.Users.CountAsync(x => x.AccountType == AccountTypeEnum.Admin);
+           var MaxAdminUsers = config.GetValue<int>("EmailSettings:SmtpPort");
+            if (adminCount >= MaxAdminUsers)
             {
-                return "Invalid email format";
+                return "Cannot create new admin user - maximum number of admin users reached";
+            }
+        }
+
+        if (!new EmailAddressAttribute().IsValid(request.MailAddress))
+        {
+            return "Invalid email format";
+        }
+
+        var user = await _dbContext.Users.AsNoTracking().FirstOrDefaultAsync(x => x.MailAddress.ToLower() == request.MailAddress.ToLower(), cancellationToken);
+        if (user != null)
+        {
+            return "This User already Exist";
+        }
+
+        var accountTypeString = request.AccountType.ToString();
+
+        var model = new User()
+        {
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber,
+            MailAddress = request.MailAddress,
+            AccountType = Enum.Parse<AccountTypeEnum>(accountTypeString),
+            IsActive = true,
+            Deactivated = false,
+            PasswordHush = Crypto.HashPassword(request.Password),
+            CreatedDate = DateTime.UtcNow,
+        };
+
+        _dbContext.Users.Add(model);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (request.UserImageUpload != null || request.UserImageUpload?.Length > 0)
+        {
+            string webRootPath = _hostEnvironment.WebRootPath;
+            string folderPath = Path.Combine(webRootPath, "images", "UsersImages", model.Id.ToString());
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
             }
 
-            var user = await _dbContext.Users.AsNoTracking().AnyAsync(x => x.MailAddress.ToLower() == request.MailAddress.ToLower());
-            if (user)
-            {
-                return "This User already Exist";
-            }
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(request.UserImageUpload.FileName);
+            var filePath = Path.Combine(folderPath, fileName);
 
-            var accountTypeString = request.AccountType.ToString();
+            await UploadHelper.UploadFile(request.UserImageUpload, fileName, folderPath);
+            model.ImageUrl = Path.Combine("images", "UsersImages", model.Id.ToString(), fileName);
 
-            var model = new User()
-            {
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                PhoneNumber = request.PhoneNumber,
-                MailAddress = request.MailAddress,
-                AccountType = Enum.Parse<AccountTypeEnum>(accountTypeString),
-                IsActive = true,
-                Deactivated = false,
-                PasswordHush = Crypto.HashPassword(request.Password),
-                CreatedDate = DateTime.UtcNow,
-            };
-
-            _dbContext.Users.Add(model);
+            _dbContext.Users.Update(model);
             await _dbContext.SaveChangesAsync(cancellationToken);
-
-            if (request.UserImageUpload != null || request.UserImageUpload?.Length > 0)
-            {
-                string folder = $"image/UsersImages/{model.Id}";
-                var fileName = Guid.NewGuid().ToString();
-                var filePath = Path.Combine($"wwwroot/{folder}", fileName);
-                await UploadHelper.UploadFile(request.UserImageUpload, filePath);
-                model.ImageUrl = request.UserImageUpload.ToString();
-
-                _dbContext.Users.Update(model);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
-
-            await transaction.CommitAsync(cancellationToken);
-
-            // Send email to new user
-            var emailSubject = "Welcome to our application!";
-            var emailBody =
-                $"Dear {model.FirstName} {model.LastName},<br><br>" +
-                $"Thank you for signing up in our application." +
-                $" We look forward to giving you a wonderful exprince!";
-            await _emailService.SendEmail(model.MailAddress, emailSubject, emailBody);
-
-            return "User successfully created";
         }
-        catch (Exception)
-        {
-            throw new NotImplementedException("Error try again");
-        }
+
+        // Send email to new user
+        var emailSubject = "Welcome to Craft application!";
+        var emailBody =
+            $"Dear {model.FirstName} {model.LastName},<br><br>" +
+            $"Thank you for signing up in our application." +
+            $" We look forward to giving you a wonderful exprince!";
+        await _emailService.SendEmail(model.MailAddress, emailSubject, emailBody);
+
+        return "User successfully created";
     }
-
 
 
 }
