@@ -1,7 +1,6 @@
 ﻿using Craft.Application.Common.Interface;
 using Craft.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Craft.Application.Common.Interfaces;
 
@@ -20,11 +19,5 @@ public class ApplicationContext : DbContext, IApplicationContext
     public DbSet<School> Schools { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<Order> Orders { get; set; }
-    public DbSet<OrderItem> OrderItems { get; set; }
-
-
-    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
-    {
-        throw new NotImplementedException();
-    }
+    public DbSet<OrderItem> OrderItems { get; set; } 
 }
