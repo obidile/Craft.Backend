@@ -1,6 +1,5 @@
 ﻿using Craft.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Craft.Application.Common.Interface;
 

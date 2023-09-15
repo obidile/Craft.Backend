@@ -4,7 +4,9 @@ using Craft.Application.Common.Interfaces;
 using Craft.Infrastucture.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,17 +39,17 @@ builder.Services.AddApplicationLayer();
 builder.Services.AddHttpContextAccessor();
 
 
-//try
-//{
-//    builder.Services.AddDbContext<ApplicationContext>(options =>
-//        options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationContext"), opt => opt.EnableRetryOnFailure()));
-//}
-//catch (SqlException)
-//{
-//    Log.Warning("Failed to connect to SQL Server. Falling back to in-memory database.");
-//    builder.Services.AddDbContext<ApplicationContext>(options =>
-//        options.UseInMemoryDatabase("CraftDb"));
-//}
+try
+{
+    builder.Services.AddDbContext<ApplicationContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("ApplicationContext"), opt => opt.EnableRetryOnFailure()));
+}
+catch (SqlException)
+{
+    Log.Warning("Failed to connect to SQL Server. Falling back to in-memory database.");
+    builder.Services.AddDbContext<ApplicationContext>(options =>
+        options.UseInMemoryDatabase("CraftDb"));
+}
 
 builder.Services.AddDbContext<ApplicationContext>(options =>
         options.UseInMemoryDatabase("CraftDb"));
